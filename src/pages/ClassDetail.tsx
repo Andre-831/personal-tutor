@@ -835,45 +835,57 @@ function ClassFlashcards({
         </div>
       ) : (
         <div className="flashcard-set-grid">
-          {sets.map((set) => (
-            <div
-              className="flashcard-set-card"
-              key={set.id}
-            >
-              <button
-                className="flashcard-set-open"
-                onClick={() =>
-                  openSet(set.id)
-                }
-              >
-                <div className="flashcard-set-icon">
-                  ◫
-                </div>
-
-                <div className="flashcard-set-title">
-                  {set.title}
-                </div>
-
-                <div className="flashcard-set-meta">
-                  {set.cardCount ??
+                {sets.map((set) => {
+                  const cardCount =
+                    set.cardCount ??
                     set.cards?.length ??
-                    0}{" "}
-                  cards
-                </div>
-              </button>
+                    0;
 
-              <button
-                className="flashcard-set-delete"
-                onClick={() =>
-                  deleteSet(set.id)
-                }
-                title="Delete flashcard set"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
+                  return (
+                    <div
+                      className="flashcard-set-card"
+                      key={set.id}
+                    >
+                      <div className="flashcard-set-content">
+                        <div className="flashcard-set-icon">
+                          ◫
+                        </div>
+
+                        <div className="flashcard-set-title">
+                          {set.title}
+                        </div>
+
+                        <div className="flashcard-set-meta">
+                          {cardCount}{" "}
+                          {cardCount === 1
+                            ? "card"
+                            : "cards"}
+                        </div>
+                      </div>
+
+                      <div className="flashcard-set-actions">
+                        <button
+                          className="flashcard-study-button"
+                          onClick={() =>
+                            openSet(set.id)
+                          }
+                        >
+                          Study
+                        </button>
+
+                        <button
+                          className="flashcard-delete-button"
+                          onClick={() =>
+                            deleteSet(set.id)
+                          }
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+      </div>
       )}
     </>
   );
@@ -1368,45 +1380,55 @@ function ClassQuizzes({
           </p>
         </div>
       ) : (
-        <div className="flashcard-set-grid">
-          {quizzes.map((quiz) => (
-            <div
-              className="flashcard-set-card"
-              key={quiz.id}
-            >
-              <button
-                className="flashcard-set-open"
-                onClick={() =>
-                  openQuiz(quiz.id)
-                }
-              >
-                <div className="flashcard-set-icon">
-                  ?
-                </div>
+<div className="quiz-grid">
+  {quizzes.map((quiz) => {
+    const questionCount =
+      quiz.questions?.length ??
+      0;
 
-                <div className="flashcard-set-title">
-                  {quiz.title}
-                </div>
+    return (
+      <div
+        className="quiz-list-card"
+        key={quiz.id}
+      >
+        <div>
+          <span className="study-type">
+            {classData.name}
+          </span>
 
-                <div className="flashcard-set-meta">
-                  {quiz.questions?.length ?? 0}{" "}
-                  {(quiz.questions?.length ?? 0) === 1
-                    ? "question"
-                    : "questions"}
-                </div>
-              </button>
+          <h3>
+            {quiz.title}
+          </h3>
 
-              <button
-                className="flashcard-set-delete"
-                onClick={() =>
-                  deleteQuiz(quiz.id)
-                }
-                title="Delete quiz"
-              >
-                ×
-              </button>
-            </div>
-          ))}
+          <p>
+            {questionCount}{" "}
+            {questionCount === 1
+              ? "question"
+              : "questions"}
+          </p>
+        </div>
+
+        <div className="quiz-card-actions">
+          <button
+            onClick={() =>
+              openQuiz(quiz.id)
+            }
+          >
+            Start quiz
+          </button>
+
+          <button
+            className="quiz-delete-button"
+            onClick={() =>
+              deleteQuiz(quiz.id)
+            }
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    );
+  })}
         </div>
       )}
     </>
