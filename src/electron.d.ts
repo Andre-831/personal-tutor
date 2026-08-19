@@ -91,13 +91,6 @@ type ConversationMessage = {
 type Conversation = {
   id: string;
 
-  /*
-   * null means a general
-   * Home conversation.
-   *
-   * A string means the chat
-   * belongs to a class.
-   */
   classId:
     | string
     | null;
@@ -145,6 +138,80 @@ type FlashcardSet = {
 
   createdAt: string;
   updatedAt: string;
+};
+
+/* =========================
+   Quizzes
+========================= */
+
+type QuizQuestion = {
+  id: string;
+  quizId: string;
+
+  question: string;
+
+  type:
+    "multiple-choice";
+
+  choices: string[];
+
+  /*
+   * Stored as TEXT in SQLite.
+   * Convert with Number() when
+   * comparing answers.
+   */
+  correctAnswer: string;
+
+  explanation: string;
+
+  position: number;
+};
+
+type Quiz = {
+  id: string;
+
+  classId:
+    | string
+    | null;
+
+  title: string;
+
+  questions:
+    QuizQuestion[];
+
+  createdAt: string;
+  updatedAt: string;
+};
+
+/* =========================
+   Quiz Attempts
+========================= */
+
+type QuizAttempt = {
+  id: string;
+
+  quizId: string;
+
+  /*
+   * Percentage score:
+   * 0 - 100
+   */
+  score: number;
+
+  /*
+   * questionId -> selected
+   * choice index
+   */
+  answers:
+    Record<
+      string,
+      number
+    >;
+
+  startedAt: string;
+
+  completedAt:
+    string | null;
 };
 
 /* =========================
@@ -208,14 +275,6 @@ interface Window {
     ----------------- */
 
     flashcards: {
-      /*
-       * No classId:
-       * return every flashcard set.
-       *
-       * classId:
-       * return sets belonging
-       * to that class.
-       */
       getAll: (
         classId?:
           string | null
@@ -224,10 +283,6 @@ interface Window {
           FlashcardSet[]
         >;
 
-      /*
-       * Load one complete set,
-       * including all cards.
-       */
       get: (
         setId: string
       ) =>
@@ -235,13 +290,6 @@ interface Window {
           FlashcardSet | null
         >;
 
-      /*
-       * Generate cards with Gemini
-       * from either:
-       *
-       * - one material
-       * - all materials in a class
-       */
       generate: (
         classId: string,
         materialId?:
@@ -252,16 +300,80 @@ interface Window {
           FlashcardSet
         >;
 
-      /*
-       * Delete a set.
-       *
-       * SQLite cascade deletes
-       * the cards belonging to it.
-       */
       delete: (
         setId: string
       ) =>
         Promise<boolean>;
+    };
+
+    /* -----------------
+       Quizzes
+    ----------------- */
+
+    quizzes: {
+      getAll: (
+        classId?:
+          string | null
+      ) =>
+        Promise<
+          Quiz[]
+        >;
+
+      get: (
+        quizId: string
+      ) =>
+        Promise<
+          Quiz | null
+        >;
+
+      generate: (
+        classId: string,
+        materialId?:
+          string | null,
+        count?: number
+      ) =>
+        Promise<
+          Quiz
+        >;
+
+      delete: (
+        quizId: string
+      ) =>
+        Promise<boolean>;
+    };
+
+    /* -----------------
+       Quiz Attempts
+    ----------------- */
+
+    quizAttempts: {
+      getAll: (
+        quizId?: string
+      ) =>
+        Promise<
+          QuizAttempt[]
+        >;
+
+      create: (
+        attempt: {
+          quizId: string;
+
+          score: number;
+
+          answers:
+            Record<
+              string,
+              number
+            >;
+
+          startedAt: string;
+
+          completedAt: string;
+        }
+      ) =>
+        Promise<
+          QuizAttempt
+        >;
     };
 
     /* -----------------

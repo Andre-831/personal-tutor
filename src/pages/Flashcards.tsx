@@ -694,56 +694,52 @@ function Flashcards() {
                       set.classId
                   );
 
-                return (
-                  <div
-                    className="flashcard-set-card"
-                    key={
-                      set.id
-                    }
-                  >
-                    <button
-                      className="flashcard-set-open"
-                      onClick={() =>
-                        openSet(
-                          set.id
-                        )
-                      }
+                  return (
+                    <div
+                      className="flashcard-set-card"
+                      key={set.id}
                     >
-                      <span className="flashcard-set-icon">
-                        ◫
-                      </span>
+                      <div className="flashcard-set-content">
+                        <span className="flashcard-set-icon">
+                          ◫
+                        </span>
 
-                      <span className="flashcard-set-title">
-                        {
-                          set.title
-                        }
-                      </span>
+                        <span className="flashcard-set-title">
+                          {set.title}
+                        </span>
 
-                      <span className="flashcard-set-meta">
-                        {ownerClass?.name ||
-                          "General"}{" "}
-                        ·{" "}
-                        {
-                          set.cards
-                            .length
-                        }{" "}
-                        cards
-                      </span>
-                    </button>
+                        <span className="flashcard-set-meta">
+                          {ownerClass?.name ||
+                            "General"}{" "}
+                          ·{" "}
+                          {set.cards.length}{" "}
+                          {set.cards.length === 1
+                            ? "card"
+                            : "cards"}
+                        </span>
+                      </div>
 
-                    <button
-                      className="flashcard-set-delete"
-                      onClick={() =>
-                        deleteSet(
-                          set.id
-                        )
-                      }
-                      title="Delete flashcard set"
-                    >
-                      ×
-                    </button>
-                  </div>
-                );
+                      <div className="flashcard-set-actions">
+                        <button
+                          className="flashcard-study-button"
+                          onClick={() =>
+                            openSet(set.id)
+                          }
+                        >
+                          Study
+                        </button>
+
+                        <button
+                          className="flashcard-delete-button"
+                          onClick={() =>
+                            deleteSet(set.id)
+                          }
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
               }
             )}
           </div>

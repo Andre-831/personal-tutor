@@ -6,8 +6,7 @@ const {
 contextBridge.exposeInMainWorld(
   "desktop",
   {
-    platform:
-      process.platform,
+    platform: process.platform,
 
     /* =========================
        Classes
@@ -41,48 +40,124 @@ contextBridge.exposeInMainWorld(
     },
 
     /* =========================
-   Flashcards
-========================= */
+       Flashcards
+    ========================= */
 
-flashcards: {
-  getAll: (
-    classId = undefined
-  ) =>
-    ipcRenderer.invoke(
-      "flashcards:get-all",
-      classId
-    ),
+    flashcards: {
+      getAll: (
+        classId = undefined
+      ) =>
+        ipcRenderer.invoke(
+          "flashcards:get-all",
+          classId
+        ),
 
-  get: (
-    setId
-  ) =>
-    ipcRenderer.invoke(
-      "flashcards:get",
-      setId
-    ),
+      get: (
+        setId
+      ) =>
+        ipcRenderer.invoke(
+          "flashcards:get",
+          setId
+        ),
 
-  generate: (
-    classId,
-    materialId = null,
-    count = 10
-  ) =>
-    ipcRenderer.invoke(
-      "flashcards:generate",
-      {
+      generate: (
         classId,
-        materialId,
-        count,
-      }
-    ),
+        materialId = null,
+        count = 10
+      ) =>
+        ipcRenderer.invoke(
+          "flashcards:generate",
+          {
+            classId,
+            materialId,
+            count,
+          }
+        ),
 
-  delete: (
-    setId
-  ) =>
-    ipcRenderer.invoke(
-      "flashcards:delete",
-      setId
-    ),
-},
+      delete: (
+        setId
+      ) =>
+        ipcRenderer.invoke(
+          "flashcards:delete",
+          setId
+        ),
+    },
+
+    /* =========================
+       Quizzes
+    ========================= */
+
+    quizzes: {
+      getAll: (
+        classId = undefined
+      ) =>
+        ipcRenderer.invoke(
+          "quizzes:get-all",
+          classId
+        ),
+
+      get: (
+        quizId
+      ) =>
+        ipcRenderer.invoke(
+          "quizzes:get",
+          quizId
+        ),
+
+      generate: (
+        classId,
+        materialId = null,
+        count = 10
+      ) =>
+        ipcRenderer.invoke(
+          "quizzes:generate",
+          {
+            classId,
+            materialId,
+            count,
+          }
+        ),
+
+      delete: (
+        quizId
+      ) =>
+        ipcRenderer.invoke(
+          "quizzes:delete",
+          quizId
+        ),
+    },
+
+    /* =========================
+       Quiz Attempts
+    ========================= */
+
+    quizAttempts: {
+      getAll: (
+        quizId = undefined
+      ) =>
+        ipcRenderer.invoke(
+          "quiz-attempts:get-all",
+          quizId
+        ),
+
+      create: ({
+        quizId,
+        score,
+        answers,
+        startedAt,
+        completedAt,
+      }) =>
+        ipcRenderer.invoke(
+          "quiz-attempts:create",
+          {
+            quizId,
+            score,
+            answers,
+            startedAt,
+            completedAt,
+          }
+        ),
+    },
 
     /* =========================
        Materials

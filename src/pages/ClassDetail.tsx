@@ -38,6 +38,27 @@ type FlashcardSet = {
   updatedAt: string;
 };
 
+
+type QuizQuestion = {
+  id: string;
+  quizId: string;
+  question: string;
+  type: "multiple-choice";
+  choices: string[];
+  correctAnswer: string;
+  explanation: string;
+  position: number;
+};
+
+type Quiz = {
+  id: string;
+  classId: string | null;
+  title: string;
+  questions: QuizQuestion[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 function ClassDetail({
   classData,
   onBack,
@@ -185,7 +206,9 @@ function ClassDetail({
         )}
 
         {activeTab === "quizzes" && (
-          <ClassQuizzes />
+          <ClassQuizzes
+            classData={classData}
+           />
         )}
       </div>
     </div>
@@ -232,6 +255,47 @@ function Overview({
 }: {
   classData: ClassData;
 }) {
+  const [flashcardSets, setFlashcardSets] =
+    useState<FlashcardSet[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOverviewData() {
+      try {
+        const sets =
+          await window.desktop.flashcards.getAll(
+            classData.id
+          );
+
+        if (!cancelled) {
+          setFlashcardSets(sets);
+        }
+      } catch (error) {
+        console.error(
+          "Failed to load class overview:",
+          error
+        );
+      }
+    }
+
+    loadOverviewData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [classData.id]);
+
+  const totalCards =
+    flashcardSets.reduce(
+      (total, set) =>
+        total +
+        (set.cardCount ??
+          set.cards?.length ??
+          0),
+      0
+    );
+
   return (
     <>
       <div className="overview-section">
@@ -239,7 +303,7 @@ function Overview({
           Ask about {classData.name}
         </h2>
 
-        <ChatInput 
+        <ChatInput
           classId={classData.id}
           placeholder={`Ask about ${classData.name}...`}
         />
@@ -271,11 +335,24 @@ function Overview({
               Flashcards
             </span>
 
-            <h3>No flashcards yet</h3>
+            <h3>
+              {flashcardSets.length === 0
+                ? "No flashcards yet"
+                : `${flashcardSets.length} ${
+                    flashcardSets.length === 1
+                      ? "set"
+                      : "sets"
+                  } · ${totalCards} ${
+                    totalCards === 1
+                      ? "card"
+                      : "cards"
+                  }`}
+            </h3>
 
             <p>
-              Generate flashcards from your
-              class materials.
+              {flashcardSets.length === 0
+                ? "Generate flashcards from your class materials."
+                : "Flashcards generated for this class."}
             </p>
           </div>
 
@@ -287,8 +364,7 @@ function Overview({
             <h3>No quizzes yet</h3>
 
             <p>
-              Generate a quiz to practice
-              this class.
+              Generate a quiz to practice this class.
             </p>
           </div>
         </div>
@@ -805,7 +881,453 @@ function ClassFlashcards({
 
 
 
-function ClassQuizzes() {
+function ClassQuizzes({
+  classData,
+}: {
+  classData: ClassData;
+}) {
+  const [quizzes, setQuizzes] =
+    useState<Quiz[]>([]);
+
+  const [selectedQuiz, setSelectedQuiz] =
+    useState<Quiz | null>(null);
+
+  const [questionIndex, setQuestionIndex] =
+    useState(0);
+
+  const [answers, setAnswers] =
+    useState<Record<string, number>>({});
+
+  const [submitted, setSubmitted] =
+    useState(false);
+
+  const [generating, setGenerating] =
+    useState(false);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  async function loadQuizzes() {
+    try {
+      setLoading(true);
+
+      const result =
+        await window.desktop.quizzes.getAll(
+          classData.id
+        );
+
+      setQuizzes(result);
+      setError("");
+    } catch (err) {
+      console.error(
+        "Failed to load quizzes:",
+        err
+      );
+
+      setError(
+        "Could not load quizzes."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadQuizzes();
+  }, [classData.id]);
+
+  async function generateQuiz() {
+    const readyMaterial =
+      classData.materials[0];
+
+    if (!readyMaterial) {
+      setError(
+        "Add a ready class material first."
+      );
+      return;
+    }
+
+    try {
+      setGenerating(true);
+      setError("");
+
+      const created =
+        await window.desktop.quizzes.generate(
+          classData.id,
+          readyMaterial.id,
+          10
+        );
+
+      await loadQuizzes();
+
+      // Open the newly generated quiz immediately.
+      setSelectedQuiz(created);
+      setQuestionIndex(0);
+      setAnswers({});
+      setSubmitted(false);
+    } catch (err) {
+      console.error(
+        "Failed to generate quiz:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not generate quiz."
+      );
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function openQuiz(
+    quizId: string
+  ) {
+    try {
+      setError("");
+
+      const fullQuiz =
+        await window.desktop.quizzes.get(
+          quizId
+        );
+
+      if (!fullQuiz) {
+        setError(
+          "Could not find this quiz."
+        );
+        return;
+      }
+
+      setSelectedQuiz(fullQuiz);
+      setQuestionIndex(0);
+      setAnswers({});
+      setSubmitted(false);
+    } catch (err) {
+      console.error(
+        "Failed to open quiz:",
+        err
+      );
+
+      setError(
+        "Could not open quiz."
+      );
+    }
+  }
+
+  async function deleteQuiz(
+    quizId: string
+  ) {
+    try {
+      await window.desktop.quizzes.delete(
+        quizId
+      );
+
+      if (selectedQuiz?.id === quizId) {
+        setSelectedQuiz(null);
+      }
+
+      await loadQuizzes();
+    } catch (err) {
+      console.error(
+        "Failed to delete quiz:",
+        err
+      );
+
+      setError(
+        "Could not delete quiz."
+      );
+    }
+  }
+
+  function selectAnswer(
+    questionId: string,
+    choiceIndex: number
+  ) {
+    if (submitted) {
+      return;
+    }
+
+    setAnswers((previous) => ({
+      ...previous,
+      [questionId]: choiceIndex,
+    }));
+  }
+
+  function retakeQuiz() {
+    setAnswers({});
+    setQuestionIndex(0);
+    setSubmitted(false);
+  }
+
+//quiz player
+
+  if (selectedQuiz) {
+    const questions =
+      selectedQuiz.questions ?? [];
+
+    const currentQuestion =
+      questions[questionIndex];
+
+    if (!currentQuestion) {
+      return (
+        <div className="empty-state">
+          <p>
+            This quiz has no questions.
+          </p>
+
+          <button
+            className="secondary-button"
+            onClick={() =>
+              setSelectedQuiz(null)
+            }
+          >
+            ← Back to quizzes
+          </button>
+        </div>
+      );
+    }
+
+    const selectedAnswer =
+      answers[currentQuestion.id];
+
+    const correctAnswer =
+      Number(
+        currentQuestion.correctAnswer
+      );
+
+    const score =
+      questions.reduce(
+        (total, question) => {
+          const answer =
+            answers[question.id];
+
+          const correct =
+            Number(
+              question.correctAnswer
+            );
+
+          return answer === correct
+            ? total + 1
+            : total;
+        },
+        0
+      );
+
+    const percentage =
+      questions.length > 0
+        ? Math.round(
+            (score /
+              questions.length) *
+              100
+          )
+        : 0;
+
+    return (
+      <>
+        <div className="flashcard-study-header">
+          <button
+            className="flashcard-back-button"
+            onClick={() =>
+              setSelectedQuiz(null)
+            }
+          >
+            ← Quizzes
+          </button>
+
+          <div>
+            <h1>
+              {selectedQuiz.title}
+            </h1>
+
+            <p>
+              {questions.length} questions
+            </p>
+          </div>
+        </div>
+
+        <div className="flashcard-progress">
+          <span>
+            {questionIndex + 1} of{" "}
+            {questions.length}
+          </span>
+
+          <div className="flashcard-progress-track">
+            <div
+              className="flashcard-progress-fill"
+              style={{
+                width: `${
+                  ((questionIndex + 1) /
+                    questions.length) *
+                  100
+                }%`,
+              }}
+            />
+          </div>
+        </div>
+
+        {submitted && (
+          <div className="quiz-result-card">
+            <span>Your score</span>
+
+            <h2>
+              {score} /{" "}
+              {questions.length}
+            </h2>
+
+            <strong>
+              {percentage}%
+            </strong>
+
+            <button
+              className="secondary-button"
+              onClick={retakeQuiz}
+            >
+              Retake quiz
+            </button>
+          </div>
+        )}
+
+        <div className="quiz-question-card">
+          <span className="study-card-label">
+            Question{" "}
+            {questionIndex + 1}
+          </span>
+
+          <h2>
+            {currentQuestion.question}
+          </h2>
+
+          <div className="quiz-choices">
+            {currentQuestion.choices.map(
+              (choice, index) => {
+                let className =
+                  "quiz-choice";
+
+                if (
+                  selectedAnswer === index
+                ) {
+                  className +=
+                    " selected";
+                }
+
+                if (
+                  submitted &&
+                  index === correctAnswer
+                ) {
+                  className +=
+                    " correct";
+                }
+
+                if (
+                  submitted &&
+                  selectedAnswer ===
+                    index &&
+                  index !== correctAnswer
+                ) {
+                  className +=
+                    " incorrect";
+                }
+
+                return (
+                  <button
+                    key={index}
+                    className={
+                      className
+                    }
+                    disabled={
+                      submitted
+                    }
+                    onClick={() =>
+                      selectAnswer(
+                        currentQuestion.id,
+                        index
+                      )
+                    }
+                  >
+                    <span className="quiz-choice-letter">
+                      {String.fromCharCode(
+                        65 + index
+                      )}
+                    </span>
+
+                    <span>
+                      {choice}
+                    </span>
+                  </button>
+                );
+              }
+            )}
+          </div>
+
+          {submitted && (
+            <div className="quiz-explanation">
+              <strong>
+                {selectedAnswer ===
+                correctAnswer
+                  ? "Correct"
+                  : "Correct answer"}
+              </strong>
+
+              <p>
+                {
+                  currentQuestion.explanation
+                }
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="flashcard-navigation">
+          <button
+            disabled={
+              questionIndex === 0
+            }
+            onClick={() =>
+              setQuestionIndex(
+                (index) => index - 1
+              )
+            }
+          >
+            ← Previous
+          </button>
+
+          {!submitted &&
+          questionIndex ===
+            questions.length - 1 ? (
+            <button
+              className="primary-button"
+              onClick={() =>
+                setSubmitted(true)
+              }
+            >
+              Submit quiz
+            </button>
+          ) : (
+            <button
+              disabled={
+                questionIndex ===
+                questions.length - 1
+              }
+              onClick={() =>
+                setQuestionIndex(
+                  (index) => index + 1
+                )
+              }
+            >
+              Next →
+            </button>
+          )}
+        </div>
+      </>
+    );
+  }
+
+//quiz list
+
   return (
     <>
       <div className="section-heading">
@@ -813,24 +1335,83 @@ function ClassQuizzes() {
           <h2>Quizzes</h2>
 
           <p>
-            Practice quizzes generated for
-            this class.
+            Practice quizzes generated
+            for {classData.name}.
           </p>
         </div>
 
-        <button className="primary-button">
-          + Generate quiz
+        <button
+          className="primary-button"
+          onClick={generateQuiz}
+          disabled={generating}
+        >
+          {generating
+            ? "Generating..."
+            : "+ Generate quiz"}
         </button>
       </div>
 
-      <div className="empty-state">
-        <p>No quizzes yet.</p>
-      </div>
+      {error && (
+        <div className="flashcards-error">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <p className="muted">
+          Loading quizzes...
+        </p>
+      ) : quizzes.length === 0 ? (
+        <div className="empty-state">
+          <p>
+            No quizzes yet.
+          </p>
+        </div>
+      ) : (
+        <div className="flashcard-set-grid">
+          {quizzes.map((quiz) => (
+            <div
+              className="flashcard-set-card"
+              key={quiz.id}
+            >
+              <button
+                className="flashcard-set-open"
+                onClick={() =>
+                  openQuiz(quiz.id)
+                }
+              >
+                <div className="flashcard-set-icon">
+                  ?
+                </div>
+
+                <div className="flashcard-set-title">
+                  {quiz.title}
+                </div>
+
+                <div className="flashcard-set-meta">
+                  {quiz.questions?.length ?? 0}{" "}
+                  {(quiz.questions?.length ?? 0) === 1
+                    ? "question"
+                    : "questions"}
+                </div>
+              </button>
+
+              <button
+                className="flashcard-set-delete"
+                onClick={() =>
+                  deleteQuiz(quiz.id)
+                }
+                title="Delete quiz"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
-
-
 
 function formatFileSize(
   bytes: number

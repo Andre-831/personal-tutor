@@ -8,7 +8,7 @@ const crypto = require("crypto");
 
 const {ingestMaterial,} = require("./services/ingestion.cjs");
 
-const { streamTutorResponse,generateFlashcards,} = require("./services/ai.cjs");
+const { streamTutorResponse,generateFlashcards, generateQuiz} = require("./services/ai.cjs");
 
 
 
@@ -33,6 +33,16 @@ const {
   getFlashcardSet: dbGetFlashcardSet,
   createFlashcardSet: dbCreateFlashcardSet,
   deleteFlashcardSet: dbDeleteFlashcardSet,
+  
+  getQuizzes: dbGetQuizzes,
+  getQuiz: dbGetQuiz,
+  createQuiz: dbCreateQuiz,
+  deleteQuiz: dbDeleteQuiz,
+
+  getQuizAttempts: dbGetQuizAttempts,
+
+  createQuizAttempt: dbCreateQuizAttempt,
+
 } = require("./services/database.cjs");
 
 const isDev = !app.isPackaged;
@@ -1232,6 +1242,214 @@ ipcMain.handle(
     );
   }
 );
+
+//quizzes
+
+ipcMain.handle(
+  "quizzes:get-all",
+  (
+    _event,
+    classId = undefined
+  ) => {
+    return dbGetQuizzes(
+      classId
+    );
+  }
+);
+
+ipcMain.handle(
+  "quizzes:get",
+  (
+    _event,
+    quizId
+  ) => {
+    return dbGetQuiz(
+      quizId
+    );
+  }
+);
+
+ipcMain.handle(
+  "quizzes:generate",
+  async (
+    _event,
+    {
+      classId,
+      materialId = null,
+      count = 10,
+    }
+  ) => {
+    if (!classId) {
+      throw new Error(
+        "A class is required."
+      );
+    }
+
+    const classData =
+      getClassWithMaterials(
+        classId
+      );
+
+    if (!classData) {
+      throw new Error(
+        "Class not found."
+      );
+    }
+
+let generated;
+
+try {
+  generated =
+    await generateQuiz({
+      classData,
+      materialId,
+      count,
+    });
+} catch (error) {
+  if (error?.status === 429) {
+    throw new Error(
+      "Gemini's free usage limit has been reached. Try generating the quiz again later."
+    );
+  }
+
+  if (error?.status === 503) {
+    throw new Error(
+      "Gemini is temporarily busy. Try again shortly."
+    );
+  }
+
+  throw error;
+}
+
+    const now =
+      new Date().toISOString();
+
+    const quiz = {
+      id:
+        crypto.randomUUID(),
+
+      classId,
+
+      title:
+        generated.title,
+
+      createdAt:
+        now,
+
+      updatedAt:
+        now,
+
+      questions:
+        generated.questions.map(
+          (
+            question,
+            index
+          ) => ({
+            id:
+              crypto.randomUUID(),
+
+            question:
+              question.question,
+
+            choices:
+              question.choices,
+
+            correctAnswer:
+              question.correctAnswer,
+
+            explanation:
+              question.explanation,
+
+            type:
+              "multiple-choice",
+
+            position:
+              index,
+          })
+        ),
+    };
+
+    const saved =
+      dbCreateQuiz(
+        quiz
+      );
+
+    console.log(
+      `Created quiz "${saved.title}" with ${saved.questions.length} questions`
+    );
+
+    return saved;
+  }
+);
+
+ipcMain.handle(
+  "quizzes:delete",
+  (
+    _event,
+    quizId
+  ) => {
+    return dbDeleteQuiz(
+      quizId
+    );
+  }
+);
+
+
+
+ipcMain.handle(
+  "quiz-attempts:get-all",
+  (
+    _event,
+    quizId = undefined
+  ) => {
+    return dbGetQuizAttempts(
+      quizId
+    );
+  }
+);
+
+ipcMain.handle(
+  "quiz-attempts:create",
+  (
+    _event,
+    {
+      quizId,
+      score,
+      answers,
+      startedAt,
+      completedAt,
+    }
+  ) => {
+    if (!quizId) {
+      throw new Error(
+        "A quiz is required."
+      );
+    }
+
+    return dbCreateQuizAttempt({
+      id:
+        crypto.randomUUID(),
+
+      quizId,
+
+      score,
+
+      answers:
+        answers || {},
+
+      startedAt:
+        startedAt ||
+        new Date().toISOString(),
+
+      completedAt:
+        completedAt ||
+        new Date().toISOString(),
+    });
+  }
+);
+
+
+
 
 app.whenReady().then(
   () => {

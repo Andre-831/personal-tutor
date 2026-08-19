@@ -822,7 +822,272 @@ Use exactly this structure:
   };
 }
 
+
+async function generateQuiz({
+  classData,
+  materialId = null,
+  count = 10,
+}) {
+  if (!classData) {
+    throw new Error(
+      "A class is required to generate a quiz."
+    );
+  }
+
+  const readyMaterials = (
+    classData.materials || []
+  ).filter(
+    (material) =>
+      material.ingestion?.status ===
+      "ready"
+  );
+
+  if (readyMaterials.length === 0) {
+    throw new Error(
+      "This class does not have any ready materials."
+    );
+  }
+
+  let selectedMaterials =
+    readyMaterials;
+
+  if (materialId) {
+    selectedMaterials =
+      readyMaterials.filter(
+        (material) =>
+          material.id === materialId
+      );
+
+    if (
+      selectedMaterials.length === 0
+    ) {
+      throw new Error(
+        "The selected material could not be found."
+      );
+    }
+  }
+
+  const chunks =
+    getFullMaterialChunks(
+      selectedMaterials
+    );
+
+  if (chunks.length === 0) {
+    throw new Error(
+      "No text was found in the selected material."
+    );
+  }
+
+  const context =
+    buildContext(chunks);
+
+  const ai =
+    await getClient();
+
+  const questionCount =
+    Math.max(
+      1,
+      Math.min(
+        Number(count) || 10,
+        30
+      )
+    );
+
+  const materialNames =
+    selectedMaterials
+      .map(
+        (material) =>
+          material.name
+      )
+      .join(", ");
+
+  const prompt = `
+You are creating a multiple-choice quiz for a university student.
+
+CLASS:
+${classData.name}
+
+SOURCE MATERIAL:
+${materialNames}
+
+CLASS MATERIAL:
+${context}
+
+Create exactly ${questionCount} useful multiple-choice questions using ONLY the supplied class material.
+
+STRICT SOURCE-GROUNDING RULES:
+- Every question and answer must be explicitly supported by the supplied class material.
+- Do NOT add facts, terminology, examples, or explanations from outside knowledge.
+- Preserve the terminology used in the class material whenever possible.
+- You may paraphrase the material, but do not introduce new information.
+- If something cannot be supported by the supplied material, do not ask about it.
+
+QUIZ QUALITY:
+- Focus on important concepts likely to matter for studying or an exam.
+- Avoid trivial questions.
+- Avoid duplicate questions.
+- Each question must have exactly 4 choices.
+- Exactly one choice must be correct.
+- Make incorrect choices plausible but clearly incorrect according to the supplied material.
+- correctAnswer must be the zero-based index of the correct choice: 0, 1, 2, or 3.
+- Give a short explanation of why the correct answer is correct.
+- Do not use Markdown formatting.
+
+Before returning the quiz, internally verify every question against the supplied class material.
+
+Return ONLY valid JSON.
+
+Use exactly this structure:
+
+{
+  "title": "Short descriptive quiz title",
+  "questions": [
+    {
+      "question": "Question text",
+      "choices": [
+        "Choice A",
+        "Choice B",
+        "Choice C",
+        "Choice D"
+      ],
+      "correctAnswer": 0,
+      "explanation": "Short explanation"
+    }
+  ]
+}
+`;
+
+  console.log(
+    `Generating ${questionCount} quiz questions from ${selectedMaterials.length} material(s), ${chunks.length} chunks`
+  );
+
+  const response =
+    await ai.models.generateContent({
+      model:
+        "gemini-3.5-flash",
+
+      contents:
+        prompt,
+
+      config: {
+        responseMimeType:
+          "application/json",
+      },
+    });
+
+  const text =
+    response.text || "";
+
+  if (!text.trim()) {
+    throw new Error(
+      "Gemini returned an empty quiz response."
+    );
+  }
+
+  let result;
+
+  try {
+    result =
+      JSON.parse(text);
+  } catch (error) {
+    console.error(
+      "Could not parse quiz JSON:",
+      text
+    );
+
+    throw new Error(
+      "Gemini returned invalid quiz data."
+    );
+  }
+
+  if (
+    !result ||
+    !Array.isArray(
+      result.questions
+    )
+  ) {
+    throw new Error(
+      "Gemini returned an invalid quiz."
+    );
+  }
+
+  const questions =
+    result.questions
+      .filter(
+        (item) =>
+          typeof item.question ===
+            "string" &&
+          Array.isArray(
+            item.choices
+          ) &&
+          item.choices.length ===
+            4 &&
+          Number.isInteger(
+            item.correctAnswer
+          ) &&
+          item.correctAnswer >= 0 &&
+          item.correctAnswer <= 3
+      )
+      .slice(
+        0,
+        questionCount
+      )
+      .map(
+        (item) => ({
+          question:
+            item.question.trim(),
+
+          choices:
+            item.choices.map(
+              (choice) =>
+                String(
+                  choice
+                ).trim()
+            ),
+
+          correctAnswer:
+            item.correctAnswer,
+
+          explanation:
+            typeof item.explanation ===
+            "string"
+              ? item.explanation.trim()
+              : "",
+        })
+      );
+
+  if (
+    questions.length === 0
+  ) {
+    throw new Error(
+      "Gemini did not generate any usable quiz questions."
+    );
+  }
+
+  return {
+    title:
+      typeof result.title ===
+        "string" &&
+      result.title.trim()
+        ? result.title.trim()
+        : `${classData.name} Quiz`,
+
+    questions,
+
+    materialIds:
+      selectedMaterials.map(
+        (material) =>
+          material.id
+      ),
+  };
+}
+
+
+
+
+
 module.exports = {
   streamTutorResponse,
   generateFlashcards,
+  generateQuiz,
 };

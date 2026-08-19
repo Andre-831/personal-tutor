@@ -997,10 +997,288 @@ function deleteFlashcardSet(
   return true;
 }
 
-/* =========================================================
-   Row mapping
-========================================================= */
 
+// quizzes
+
+function getQuizzes(
+  classId = undefined
+) {
+  let rows;
+
+  if (classId === undefined) {
+    rows = db
+      .prepare(`
+        SELECT *
+        FROM quizzes
+        ORDER BY updated_at DESC
+      `)
+      .all();
+  } else if (classId === null) {
+    rows = db
+      .prepare(`
+        SELECT *
+        FROM quizzes
+        WHERE class_id IS NULL
+        ORDER BY updated_at DESC
+      `)
+      .all();
+  } else {
+    rows = db
+      .prepare(`
+        SELECT *
+        FROM quizzes
+        WHERE class_id = ?
+        ORDER BY updated_at DESC
+      `)
+      .all(classId);
+  }
+
+  return rows
+    .map((row) => getQuiz(row.id))
+    .filter(Boolean);
+}
+
+function getQuiz(quizId) {
+  const row = db
+    .prepare(`
+      SELECT *
+      FROM quizzes
+      WHERE id = ?
+    `)
+    .get(quizId);
+
+  if (!row) {
+    return null;
+  }
+
+  const questions = db
+    .prepare(`
+      SELECT *
+      FROM quiz_questions
+      WHERE quiz_id = ?
+      ORDER BY position ASC
+    `)
+    .all(quizId);
+
+  return {
+    id: row.id,
+    classId: row.class_id,
+    title: row.title,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+
+    questions: questions.map(
+      (question) => ({
+        id: question.id,
+
+        quizId:
+          question.quiz_id,
+
+        question:
+          question.question,
+
+        type:
+          question.question_type,
+
+        choices:
+          question.choices_json
+            ? JSON.parse(
+                question.choices_json
+              )
+            : [],
+
+        correctAnswer:
+          question.correct_answer,
+
+        explanation:
+          question.explanation || "",
+
+        position:
+          question.position,
+      })
+    ),
+  };
+}
+
+function createQuiz(quiz) {
+  const transaction =
+    db.transaction(() => {
+      db.prepare(`
+        INSERT INTO quizzes (
+          id,
+          class_id,
+          title,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        quiz.id,
+        quiz.classId || null,
+        quiz.title,
+        quiz.createdAt,
+        quiz.updatedAt
+      );
+
+      const statement =
+        db.prepare(`
+          INSERT INTO quiz_questions (
+            id,
+            quiz_id,
+            question,
+            question_type,
+            choices_json,
+            correct_answer,
+            explanation,
+            position
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+      (
+        quiz.questions || []
+      ).forEach(
+        (question, index) => {
+          statement.run(
+            question.id,
+            quiz.id,
+            question.question,
+
+            question.type ||
+              "multiple-choice",
+
+            JSON.stringify(
+              question.choices || []
+            ),
+
+            String(
+              question.correctAnswer
+            ),
+
+            question.explanation || "",
+
+            question.position ?? index
+          );
+        }
+      );
+    });
+
+  transaction();
+
+  return getQuiz(quiz.id);
+}
+
+function deleteQuiz(
+  quizId
+) {
+  db.prepare(`
+    DELETE FROM quizzes
+    WHERE id = ?
+  `).run(quizId);
+
+  return true;
+}
+
+
+// quiz attempts
+
+function getQuizAttempts(
+  quizId = undefined
+) {
+  let rows;
+
+  if (quizId === undefined) {
+    rows = db
+      .prepare(`
+        SELECT *
+        FROM quiz_attempts
+        ORDER BY started_at DESC
+      `)
+      .all();
+  } else {
+    rows = db
+      .prepare(`
+        SELECT *
+        FROM quiz_attempts
+        WHERE quiz_id = ?
+        ORDER BY started_at DESC
+      `)
+      .all(quizId);
+  }
+
+  return rows.map(
+    (row) => ({
+      id: row.id,
+
+      quizId:
+        row.quiz_id,
+
+      score:
+        row.score,
+
+      answers:
+        row.answers_json
+          ? JSON.parse(
+              row.answers_json
+            )
+          : {},
+
+      startedAt:
+        row.started_at,
+
+      completedAt:
+        row.completed_at,
+    })
+  );
+}
+
+function createQuizAttempt(
+  attempt
+) {
+  db.prepare(`
+    INSERT INTO quiz_attempts (
+      id,
+      quiz_id,
+      score,
+      answers_json,
+      started_at,
+      completed_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    attempt.id,
+    attempt.quizId,
+    attempt.score,
+
+    JSON.stringify(
+      attempt.answers || {}
+    ),
+
+    attempt.startedAt,
+    attempt.completedAt || null
+  );
+
+return {
+  id: attempt.id,
+
+  quizId:
+    attempt.quizId,
+
+  score:
+    attempt.score,
+
+  answers:
+    attempt.answers || {},
+
+  startedAt:
+    attempt.startedAt,
+
+  completedAt:
+    attempt.completedAt || null,
+};
+}
+
+//row mapping
 function mapClassRow(row) {
   return {
     id: row.id,
@@ -1505,4 +1783,12 @@ module.exports = {
   getFlashcardSet,
   createFlashcardSet,
   deleteFlashcardSet,
+  
+  getQuizzes,
+  getQuiz,
+  createQuiz,
+  deleteQuiz,
+
+  getQuizAttempts,
+  createQuizAttempt,
 };
